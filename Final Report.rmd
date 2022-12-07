@@ -1,0 +1,562 @@
+---
+title: "\\vspace{2.5in} Project Final Report"
+author:
+  - Team 29
+  -
+  - Haris Saeed (hs8tuf)
+  -
+  - Hamsini Muralikrishnan (hm7qgr)
+  -
+  - Richard He (yh9vhg)
+  -
+  - Bella Binder (imb6bwd) 
+output: pdf_document
+header-includes: 
+  - \renewcommand{\and}{\\}
+---
+
+
+```{r include = FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(fig.width=12, fig.height=6, fig.align = "center")
+suppressPackageStartupMessages(library(glmnet))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(tree))
+```
+
+\newpage
+
+# 1. Executive Summary
+
+## Questions of Interest
+### Regression Question: 
+Which predictors influence the selling price of a used car the most and should be accounted for when a used car is being sold?
+
+### Motivations
+This question is worth exploring because car sellers can understand what characteristics increase or decrease the selling price of a car. Sellers can use this information when bringing in cars to the business to ensure a wide variety of cars to appeal to various customers. Furthermore, this data can be used by sellers to market the used cars a certain way by emphasizing the influential characteristics when speaking to a customer so that they are persuaded to buy the car. 
+
+### Classification Question:
+Which characteristics of a car influence whether a used car is sold to the customer or not?
+
+### Motivations
+This question is worth exploring because sellers can see what characteristics of their car can enhance it being bought. Sellers can use the data for when they should sell and for what price at that time. They can also see if the characteristics of their car are similar to a car that did not sell and put cars in the storage or discard them if they are not worth putting on the market at that time.
+
+## Answering the Questions of Interest
+This study found that the most important aspects when assigning a selling price to a car is the maximum power output and the model year of a car, with higher prices being attached to higher maximum power outputs and more recent model years. This study also found that the selling price of a car, how many kilometers the car has been driven, and the maximum power output of the car are important aspects for whether a car is sold or not, aiding sellers in determining which cars would be good on the market. In addition to these findings, the study also determined that other factors on whether a car is bought or not are related to human behavior, such as impulse buying, and socioeconomic factors, such as their financial status. 
+
+\newpage
+
+# 2. Data Description 
+## Data Info
+The data is about the Indian Used-Car market based on the information a consulting firm has gathered from various market surveys alongside the usage of a site known as Car Dheko, an online car dealing website. This dataset contains 18 different variables concerning used cars such as the mileage, make, engine type, car’s selling price in rupees, and whether a car was sold or not to a customer. 
+
+## Data Source
+The dataset was found on Kaggle and the link is included below. The dataset is labeled Used-Car Data. We did not use data from any R package, nor the cereal data set from kaggle, nor the Western Collaborative Group Study (wcgs) dataset. None of the group members have previously worked with this dataset in previous classes. The dataset does not include any data related to time. Furthermore, the data included in this dataset is not simulated. 
+Dataset Link: https://www.kaggle.com/datasets/shubham1kumar/usedcar-data?select=UserCarData.csv
+
+## Description of Variables Used
+### Response Variables
+- The response variable for the regression question is the selling price column indicating the selling price of the used car measured in rupees. A new variable is created to convert rupees to USD to aid in the understanding of the data, and will be used in place of the original response variable.
+- The response variable for the categorical question is the sold column indicating whether the used car was sold to the customer or not. The variable is binary and the two classes are “Y”, referring to the car being sold, or “N”, referring to the car not being sold.
+
+### Other Important Variables
+- Mileage: A continuous variable that refers to the number of miles a vehicle can travel with one gallon of fuel. 
+- Seats: The number of seats in the car. The values of this predictor are discrete as there can only be whole number/integer values. 
+- Engine: The displacement of the engine measured in cubic centimeters and its values are discrete. 
+- Region: The area in India the car used in and is categorical.
+- Max Power: The power the engine can output and its values are continuous and measured in horsepower. 
+- Km Driven: Number of kilometers the vehicle has been driven before being put on sale and its values are discrete. 
+- Transmission: A categorical variable that refers to whether the car’s transmission is automatic or manual. 
+- Fuel Type: The type of fuel the car uses, such as diesel or petrol and this is a categorical variable.
+- Year: The year the manufacturer puts on the car, also known as the model year.
+- Seller Type: The type of dealer selling the car, can be an individual, a dealer, or a trust mark dealer.
+- Owner: Which owner of the car is selling the car, can be from the dealership classified as test drive car, the first owner, second, third, or fourth and above owner.
+
+\newpage
+
+# 3. Regression Question
+## Data Cleaning
+```{r}
+Data<-read.csv("UserCarData.csv", header=TRUE)
+Data$price_usd <- Data$selling_price * 0.012
+
+# training & testing sets split 
+set.seed(4630)
+sample.data <- sample.int(nrow(Data), floor(.50*nrow(Data)), replace = F) 
+train <- Data[sample.data, ]
+test <- Data[-sample.data, ]
+```
+
+## EDA
+```{r}
+plot(train$price_usd~train$year, xlab="Car Model Year", ylab="Selling Price (USD)", main="Car Model Year")
+```
+This scatter plot shows the selling price compared to the model year of the car was purchased by the current seller. It shows that there may be a strong positive correlation between a more recent model year and a higher selling price. This is not surprising since newer cars sell for more in the market. Additionally, cars that are newer are bound to be less used by the seller, making buyers see the car as if they are buying a brand new car, thus making sellers keep relatively the same price as when they bought it or even higher for a profit.
+
+```{r}
+plot(train$price_usd~train$seats, xlab="Number of Seats", ylab="Selling Price (USD)", main="Selling Price against Number of Seats")
+```
+This scatter plot shows the selling price compared to the number of seats. It shows that there is an increase in the selling price of 5-seat cars and a decrease in the selling price of 6+ seat cars. This is surprising since you would expect a bigger car to increase the selling price. Likewise, you wouldn’t expect many families to buy cars with almost 10 seats.
+
+```{r}
+boxplot(train$price_usd~train$owner, xlab="Current Owner", ylab="Selling Price (USD)", main="Selling Price against Current Owner")
+```
+This boxplot shows the selling price compared to different current owners that are putting the car on sale. There is a surprising difference between the car being sold from the dealer, labeled above as a “Test Drive Car”, and the car already being used by any number of owners. We expected there to be a difference between each of the owners and it gradually decreasing with the car being passed down to more owners. Instead we see a huge drop from the dealership to the next owner and then relatively the same selling price from the first owner and rest
+
+```{r}
+boxplot(train$price_usd~train$transmission, xlab="Transmission Type", ylab="Selling Price (USD)", main="Selling Price against Transmission Type")
+```
+This boxplot shows the selling price compared to the transmission type. It shows that there is a large difference between the selling prices of cars with automatic transmission. Likewise, it shows the difference between the selling prices of manual transmission is about half of automatic transmission.
+
+**Predictor Correlations with Selling Price**
+``` {r, comment="", prompt=TRUE}
+round(cor(train[c(3,5,13,14,15,17)], train$price_usd),3) 
+```
+This numerical summary shows different predictors and their correlation with the selling price. There seems to be a positive correlation with year, engine, and max power predictors. There seems to be a negative correlation with the km driven and mileage (MPG). Seats has a positive correlation as well but it is fairly small compared to other predictors.
+
+**Predictor Correlations**
+```{r}
+cor(Data[,c(3,5,13,14,15,17,19)])
+```
+This numerical summary shows the correlation between predictors including the response variable of price in USD to see if there is any multicollinearity that needs to be dealt with. There seems to be a high correlation between the engine and max power and engine and seats. This makes sense since with more max power and increased weight of a car from seats, a better engine is needed. The selling price in USD seems to have a high correlation with max_power and moderate correlations with engine and year, indicating those predictors might be the significant predictors for selling price. Multicollinearity will be checked for prior to the model building to determine if engine and other predictors need to be removed to fix multicollinearity in the model.
+
+## Shrinkage Methods
+### Data Cleaning
+```{r message=FALSE}
+Data<-read.csv("UserCarData.csv", header=TRUE)
+
+# currency conversion
+Data$price_usd <- Data$selling_price * 0.012
+
+# Response variable and predictors needed
+Data <- Data[, c(3,5,6,9,10,11,12,13,14,15,17,19)]
+        
+# training & testing sets split 
+set.seed(4630)
+sample.data <- sample.int(nrow(Data), floor(.50*nrow(Data)), replace = F) 
+train <- Data[sample.data, ]
+test <- Data[-sample.data, ]
+```
+
+### Comparing MSE 
+```{r message=FALSE}
+## Multicollinearity Testing
+testModel <- lm(price_usd~year+km_driven+Region+fuel+seller_type+transmission+owner+mileage+engine+max_power+seats, data=Data)
+#car::vif(testModel)
+### Need to remove engine from the model, above 5
+## Retest
+testModel <- lm(price_usd~year+km_driven+Region+fuel+seller_type+transmission+owner+mileage+max_power+seats, data=Data)
+#car::vif(testModel) # Test Passed, all below 5
+
+## Redo Data Cleaning (Selecting variables and splitting into train and test)
+# Response variable and predictors needed
+Data <- Data[, c(1,2,3,4,5,6,7,8,10,11,12)]
+        
+# training & testing sets split 
+set.seed(4630)
+sample.data <- sample.int(nrow(Data), floor(.50*nrow(Data)), replace = F) 
+train <- Data[sample.data, ]
+test <- Data[-sample.data, ]
+
+## Continue with model building and MSE calculating
+## Threshold for glmnet()
+library(glmnet)
+library(ggplot2)
+
+x<-model.matrix(price_usd~.,data=Data)[,-1]
+y<-Data$price_usd
+
+## Finding the threshold
+ridge.r <- glmnet::glmnet(x, y, alpha=0, lambda=0, thresh = 1e-23)
+
+## Compare with OLS
+result <- lm(price_usd~.,data=Data)
+# cbind(coefficients(result), coefficients(ridge.r))
+
+## Applying Ridge Regression
+# Training split
+set.seed(4630)
+sample.data <- sample.int(nrow(Data), floor(.50*nrow(Data)), replace = F) 
+
+##observations that belong to the training data
+x.train<-x[sample.data,]
+x.test<-x[-sample.data,]
+y.train<-y[sample.data]
+y.test<-y[-sample.data]
+
+### Tuning Parameter Based on 10-fold Cross-Validation
+set.seed(4630)
+cv.out<-glmnet::cv.glmnet(x.train,y.train,alpha=0,thresh = 1e-23)
+bestlam.ridge<-cv.out$lambda.min
+# bestlam.ridge
+
+### Actual Test MSE
+ridge.mod<-glmnet(x.train,y.train,alpha=0,lambda=bestlam.ridge, thresh = 1e-23)
+# coefficients(ridge.mod)
+
+##Test MSE with best lambda
+ridge.pred<-predict(ridge.mod,newx=x.test)
+ridge_MSE = mean((ridge.pred-y.test)^2)
+# ridge_MSE
+
+## Applying Lasso Regression
+### Tuning Parameter Based on 10-fold Cross-Validation
+set.seed(4630)
+cv.out.lasso<-glmnet::cv.glmnet(x.train,y.train,alpha=1, thresh = 1e-23)
+bestlam.lasso<-cv.out.lasso$lambda.min
+# bestlam.lasso
+
+### List of Predictors Left in Model
+# used to find which predictors are kept in the model
+lasso.mod<-glmnet(x.train,y.train,alpha=1,lambda=bestlam.lasso, thresh = 1e-23)
+# coefficients(lasso.mod)
+
+### Actual Test MSE
+
+##Test MSE with best lambda
+lasso.pred<-predict(lasso.mod,newx=x.test)
+lasso_MSE = mean((lasso.pred-y.test)^2)
+# lasso_MSE
+
+## Actual Test MSE for OLS
+result<-lm(price_usd~., data=train)
+# summary(result)
+test_yhat <- predict(result,test)
+y.test = test[,"price_usd"]
+OLS_MSE <- mean((test_yhat - y.test)^2)
+# OLS_MSE
+
+## Conclusion
+### Table with test MSE for Ridge, Lasso, and OLS regressions
+cbind(ridge_MSE, lasso_MSE, OLS_MSE)
+```
+
+## Regression Trees
+### Data Cleaning
+```{r}
+## Data cleaning
+Data<-read.csv("UserCarData.csv", header=TRUE)
+
+# currency conversion
+Data$price_usd <- Data$selling_price * 0.012
+
+# check for missing values 
+for (i in colnames(data)) {
+  if (sum(is.na(data$i))!=0)
+      print(i)
+}
+
+# remove un-needed variables and multicollinearity (engine)
+Data <- Data[, c(3,5,6,9,10,11,12,13,15,17,19)]
+
+# type-cast categorical variables into factor
+Data$fuel <- as.factor(Data$fuel)
+Data$Region <- as.factor(Data$Region)
+Data$transmission <- as.factor(Data$transmission)
+Data$seller_type <- as.factor(Data$seller_type)
+Data$owner <- as.factor(Data$owner)
+
+# training & testing sets split 
+set.seed(4630)
+sample.data <- sample.int(nrow(Data), floor(.50*nrow(Data)), 
+                          replace = F) 
+
+train.tree <- Data[sample.data, ]
+test.tree <- Data[-sample.data, ]
+```
+
+### Reason for Proposed Model
+We chose to present the tree built with recursive binary splitting because after we did a 10-fold CV on our training tree model, we found the tree size to be 9, which is the same tree as before. We couldn’t prune the tree since both recursive binary splitting and the CV have 9 terminal nodes.
+
+### Model Summary 
+```{r}
+library(tree)
+tree <- tree(price_usd~., data=train.tree)
+summary(tree)
+```
+There are a total of 9 terminal nodes in our tree with 3 predictors estimating car sale price: the max_power, year, and km_driven.
+
+### Graphical Output
+```{r}
+plot(tree)
+text(tree, cex=0.6)
+```
+
+### Random Forest
+```{r}
+set.seed(4630)
+size <- floor((ncol(train.tree)-1)/3)
+random.forest.tree <- randomForest::randomForest(price_usd~., data=train.tree, mtry=size, importance=TRUE)
+randomForest::importance(random.forest.tree)
+randomForest::varImpPlot(random.forest.tree)
+```
+
+### Comparing MSE
+```{r}
+## Recursive binary
+pred.tree <- predict(tree, newdata=test.tree)
+mse.tree <- mean((test.tree$price_usd-pred.tree)^2)
+
+## Random forests
+pred.random.forest <- predict(random.forest.tree, newdata=test.tree)
+mse.random.forest <- mean((test.tree$price_usd-pred.random.forest)^2)
+
+## Table
+tree.mse.table <- data.frame(binary.splitting=mse.tree,
+                         random.forest=mse.random.forest)
+tree.mse.table
+```
+## Summary of Findings 
+### Comparing MSE
+```{r}
+## Test MSE table
+test.mse.table <- data.frame(linear.regression=OLS_MSE, 
+ridge.regression= ridge_MSE, 
+lasso.regression= lasso_MSE, 
+recursive.binary.splitting= mse.tree, 
+random.forests= mse.random.forest)
+
+test.mse.table
+```
+Linear regression had the largest test MSE. Linear regression, ridge regression, and lasso regression are similar test MSEs around 29 million. Random forests had the smallest test MSE with 5.4 million. Recursive binary splitting did better than the linear, ridge, and lasso regressions with a MSE of 15.6 million, but worse than random forests. MSE squares the original unit, so the error value is reasonable considering the fact that the selling price in USD are values that are several thousands of USD.
+
+### How Proposed Methods Answers Our Question of Interest
+The most important predictors are the max power of a car and the model year of the car when it comes to influencing the selling price. The recursive binary splitting tree has km_driven as an additional predictor, but the MSE is higher with the predictor included with the max power and year. These predictors show that sellers base their selling price based on how powerful the car is (the max power) and the model year of the car with newer cars that are more powerful with the highest prices. This is surprising as we expected other predictors such as the km_driven to be more significant, but with the random forest regression tree and km_driven being less significant, the test MSE was halved.
+
+### Proposed Best Method
+Random forests is the best method that shows the max power and year of a car are the best predictors when it comes to influencing the selling price. Recursive binary splitting tree was also a good method, but with its involvement km_driven, the MSE was higher than random forests. Through the shrinkage methods, we see that ridge regression performs better compared to linear and lasso regression, but the MSE values are similar. Since ridge regression performed the best out of those methods, this shows that the model does better with less variance through the reduction of residual sum of squares. This brings in bias and this method does the best when there is some multicollinearity which means some multicollinearity is still present even after dealing with it before model building.
+
+\newpage
+
+# 4. Classification Question
+## Data Cleaning
+```{r}
+Data<-read.csv("UserCarData.csv", header=TRUE)
+Data$sold <- as.factor(Data$sold)
+Data$price_usd <- Data$selling_price * 0.012
+
+# training & testing sets split 
+set.seed(4630)
+sample.data <- sample.int(nrow(Data), floor(.50*nrow(Data)), replace = F) 
+train <- Data[sample.data, ]
+test <- Data[-sample.data, ]
+```
+
+## EDA
+```{r}
+boxplot(train$year~train$sold, xlab="Car Sold", ylab="Model Year of the Car", main="Model Year of the Car by Car Sold")
+```
+The box plot above displays the relationship between whether a vehicle was sold and the model year of the car (on training data). The distribution in mileage between its sold status seems similar, with a few sold and unsold vehicles as outliers when cars were purchased less recently. The outliers are explainable, since customers are more inclined to purchase the newer models, especially for a second hand car. However, the main distribution such as median and interquartile range are more similar, which means that year might not be as important for customers when considering whether to purchase a used car or not. 
+
+```{r}
+boxplot(train$mileage~train$sold, xlab="Car Sold", ylab="Miles per Gallon (MPG)", main="Miles per Gallon (MPG) by Car Sold")
+```
+The boxplot above displays the relationship between whether a vehicle was sold or not based on its mileage (on training data). The distribution in mileage between a vehicle’s sold status seems similar, with a few sold vehicles as higher outliers in mileage. Generally, for used vehicles, the more mileage the vehicle has, the cheaper it is, which could prompt more customers to purchase the car. 
+
+**Region's Proportion with Sold Status**
+``` {r, comment="", prompt=TRUE}
+prop.table(table(train$Region,train$sold), 2)
+```
+This proportion table shows the car’s region. Most cars are sold in the Eastern United States. Likewise, most unsold cars are in the Central United States. It is surprising that the most unsold cars are in the Central United States because it can be rural.
+
+**Fuel Type's Proportion with Sold Status**
+``` {r, comment="", prompt=TRUE}
+prop.table(table(train$fuel,train$sold), 2)
+```
+This numerical summary shows the relationship between fuel type and whether a vehicle was sold or not. Not many vehicles in general, that were sold or not, ran on CNG or LPG as the fuel. Most cars in the dataset ran with diesel or petrol as their fuel. But, as displayed, there was a generally even split on whether the car was sold or not between diesel or petrol as their fuel type. 
+
+**Predictor Correlations**
+```{r}
+cor(Data[,c(3,5,13,14,15,17,19)])
+```
+This numerical summary shows the correlation between predictors to see if there is any multicollinearity that needs to be dealt with. There seems to be a high correlation between the engine and max power and engine and seats. This makes sense since with more max power and increased weight of a car from seats, a better engine is needed. Selling price and the max power of a car also seem to have a high correlation. Multicollinearity will be checked for prior to the model building to determine if engine and other predictors need to be removed to fix multicollinearity in the model.
+
+## Logistic Regression
+### Model Summary
+```{r}
+lr_train <- glm(sold~year+km_driven+Region+fuel+seller_type+transmission+owner+mileage+engine+max_power+seats+price_usd, family=binomial, data=train)
+#car::vif(lr_train) #Multicollinearity: Remove engine
+lr_train <- glm(sold~year+km_driven+Region+fuel+seller_type+transmission+owner+mileage+max_power+seats+price_usd, family=binomial, data=train)
+#car::vif(lr_train) #Multicollinearity: Pass
+# Further Reducing of Model with 0.1 significant level:
+lr_train <- glm(sold~year+Region+transmission+mileage+max_power, family=binomial, data=train)
+summary(lr_train)
+```
+### Confusion Matrix
+The error rate is 0.2547. The FPR is 0 and the FNR is 1.
+```{r}
+preds<-predict(lr_train,newdata=test, type="response")
+confusion.mat<-table(test$sold,preds > 0.5)
+confusion.mat
+lr_error <- 1 - (confusion.mat[1,1]/(confusion.mat[1,1]+confusion.mat[2,1]))
+lr_FPR <- 0/(confusion.mat[1,1]+0) #FRP
+lr_FNR <- confusion.mat[2,1]/(confusion.mat[2,1]+0) #FNR
+paste("The error is", lr_error)
+paste("The FPR is", lr_FPR)
+paste("The FNR is", lr_FNR)
+```
+
+The threshold should be changed. This is because it would be better for car sellers to identified cars that may not actually sell to be marked as sold rather than cars that sell to be marked as not sold. This is because sellers want to earn a profit and thus the threshold should be changed. The new suggested threshold is 0.21, and that achieves an error rate of 0.5851, an FPR of 0.6901, and FNR of 0.2781.
+```{r}
+confusion.mat<-table(test$sold,preds > 0.21)
+confusion.mat
+
+lr_error_adjust <- 1 - ((confusion.mat[1,1]+confusion.mat[2,2])/(confusion.mat[1,1]+confusion.mat[2,1]+confusion.mat[1,2]+confusion.mat[2,2]))
+lr_FPR_adjust <- confusion.mat[1,2]/(confusion.mat[1,1]+confusion.mat[1,2]) #FRP
+lr_FNR_adjust <- confusion.mat[2,1]/(confusion.mat[2,1]+confusion.mat[2,2]) #FNR
+paste("The error is", lr_error_adjust)
+paste("The FPR is", lr_FPR_adjust)
+paste("The FNR is", lr_FNR_adjust)
+```
+
+## Classification Trees
+### Data Cleaning
+```{r}
+Data<-read.csv("UserCarData.csv", header=TRUE)
+
+# currency conversion
+Data$price_usd <- Data$selling_price * 0.012
+
+# check for missing values 
+for (i in colnames(data)) {
+  if (sum(is.na(data$i))!=0)
+      print(i)
+}
+
+# type-cast categorical variables into factor
+Data$fuel <- as.factor(Data$fuel)
+Data$Region <- as.factor(Data$Region)
+Data$owner <- factor(Data$owner)
+Data$seller_type <- factor(Data$seller_type)
+Data$transmission <- factor(Data$transmission)
+Data$sold <- factor(Data$sold)
+Data$name <- factor(Data$name)
+
+Data <- Data[, c(3,5,6,9,10,11,12,13,15,17,18,19)]
+#Data <- Data[,-c(1,7,8, 16)]
+
+# training & testing sets split 
+set.seed(4630)
+sample.data <- sample.int(nrow(Data), floor(.50*nrow(Data)),replace = F) 
+train.tree.class <- Data[sample.data, ]
+test.tree.class <- Data[-sample.data, ]
+```
+
+### Reason for Proposed Model
+We chose to present the tree built with recursive binary splitting because we have tried multiple combinations of predictors, and the best model we got was with 2 terminal nodes, so there is no point of pruning our tree. 
+
+### Model Summary
+The tree has 2 terminal nodes in it with Region as the only variable used in the tree construction.
+```{r}
+library(tree)
+tree.class <- tree(sold~., data=train.tree.class)
+summary(tree.class)
+```
+
+### Graphical Output
+```{r}
+plot(tree.class)
+text(tree.class, cex=0.6, pretty=0)
+```
+
+### Random Forest
+```{r}
+set.seed(4630)
+size.class <- floor(sqrt(ncol(train.tree.class)))
+random.forest.tree.class <- randomForest::randomForest(sold~., 
+                                                 data=train.tree.class, 
+                                                 mtry=size.class,importance=TRUE)
+randomForest::importance(random.forest.tree.class)
+randomForest::varImpPlot(random.forest.tree.class)
+```
+### Confusion Matrix & Summary Stats
+#### Recursive Binary Splitting
+The error rate is 0.2547, the FPR is 0, and the FNR is 1.
+[1] "FNR is 1"
+```{r}
+pred.tree.class <- predict(tree.class, newdata=test.tree.class, type="class")
+matrix.tree <- table(test.tree.class$sold, pred.tree.class)
+matrix.tree
+
+error.tree <- 1-mean(pred.tree.class==test.tree.class$sold)
+FPR.tree <- matrix.tree[1,2]/(matrix.tree[1,1]+matrix.tree[1,2])
+FNR.tree <- matrix.tree[2,1]/(matrix.tree[2,1]+matrix.tree[2,2])
+
+paste('Error rate is', error.tree)
+paste('FPR is', FPR.tree)
+paste('FNR is', FNR.tree)
+```
+The threshold does not need to be changed from 0.5. As shown below, adjusting it lower and higher does not make a difference. The results also make sense due to the fact that the sold variable is heavily dominated by N's indicating the vehicle not being sold, while there are a small amount of Y's, indicating the vehicle being sold.
+```{r}
+paste("Threshold 0.01")
+pred.probs<-predict(tree.class, newdata=test.tree.class)
+table(test.tree.class$sold, pred.probs[,2]>0.01)
+paste("Threshold 0.1")
+pred.probs<-predict(tree.class, newdata=test.tree.class)
+table(test.tree.class$sold, pred.probs[,2]>0.1)
+paste("Threshold 0.9")
+table(test.tree.class$sold, pred.probs[,2]>0.9)
+```
+
+#### Random Forest
+The error rate is 0.2750, the FPR is 0.0479, and the FNR is 0.9394.
+```{r}
+pred.random.forest.class <- predict(random.forest.tree.class, 
+                                    newdata=test.tree.class, type='class')
+matrix.random.forest <- table(test.tree.class$sold, pred.random.forest.class)
+matrix.random.forest
+
+FPR.random.forest <- matrix.random.forest[1,2]/(matrix.random.forest[1,1]+
+                                                  matrix.random.forest[1,2])
+FNR.random.forest <- matrix.random.forest[2,1]/(matrix.random.forest[2,1]+
+                                                  matrix.random.forest[2,2])
+
+error.random.forest <-1-mean(pred.random.forest.class==test.tree.class$sold)
+paste('Error rate is', error.random.forest)
+paste('FPR is', FPR.random.forest)
+paste('FNR is', FNR.random.forest)
+```
+
+We believe that the threshold needs to be adjusted such that the FNR decreases, because a lot of cars that are sold are being identified as not sold. This is done by lowering the threshold. If the model is inaccurately identifying sold cars as unsold, this will reflect negatively on the company. With a threshold of 0.18, we now have an error rate of 0.5492, FPR of 0.6246, and FNR of 0.3287, as shown below. 
+```{r}
+pred.probs.forest <- predict(random.forest.tree.class, newdata=test.tree.class, type="prob")
+matrix.random.forest.adjust <- table(test.tree.class$sold, pred.probs.forest[,2]>0.18)
+matrix.random.forest.adjust
+FPR.random.forest.adjust <- matrix.random.forest.adjust[1,2]/(matrix.random.forest.adjust[1,1]+              matrix.random.forest.adjust[1,2])
+FNR.random.forest.adjust <- matrix.random.forest.adjust[2,1]/(matrix.random.forest.adjust[2,1]+              matrix.random.forest.adjust[2,2])
+adjustedError <- 1 - ((matrix.random.forest.adjust[1,1]+matrix.random.forest.adjust[2,2])/ (matrix.random.forest.adjust[1,1]+matrix.random.forest.adjust[2,2]+
+  matrix.random.forest.adjust[1,2]+matrix.random.forest.adjust[2,1]))
+
+paste("Error is ", adjustedError)
+paste('FPR is', FPR.random.forest.adjust)
+paste('FNR is', FNR.random.forest.adjust)
+```
+
+## Summary of Findings 
+### Comparing Error Rates & FPR & FNR
+The error rate for all 3 methods along with their FPR and FNR rates are similar. Binary splitting and logistic regression perform the same under a threshold of 0.5, while random forests has a higher error rate with an FNR of about 0.95 and FPR of about 0.05. Discussion of why the threshold should be changed and what it was changed to is in the next section.
+```{r}
+tree.class.table <- data.frame(binary.splitting=c(error.tree,FPR.tree,FNR.tree), random.forest=c(error.random.forest,FPR.random.forest, FNR.random.forest),logistic.reg=c(lr_error,lr_FPR ,lr_FNR))
+rownames(tree.class.table) <- c('Error','FPR','FNR')
+tree.class.table
+```
+
+### Threshold Discussion
+We believe that the threshold needs to be adjusted for all of them. We want cars to be identified as sold even if they would not sell to make sellers put those cars out and make a profit rather than identifying cars that would sell as not being sold so they aren't sold and make less than they should. For binary splitting, as explained in an earlier section, regardless of the threshold, the results do not change. For random forests, a threshold of 0.18 gives us an error of 0.5492, a FPR of 0.6246, and FNR of 0.3287. For logistic regression, a threshold 0.21 gives us an error of 0.5851, FPR of 0.6901, and a FNR of 0.2781. These thresholds were chosen to have a higher FPR value when compared to the FNR value, while also keeping error rates as low as they could be. Although the error is higher than before, this is more beneficial for a seller as described above. Random forests has a lower error, lower FPR, and higher FNR than the logistic regression model. Based on the new error rate, FPR, and FNR values, the better model is the random forest model.
+```{r}
+tree.class.table <- data.frame(binary.splitting=c(error.tree,FPR.tree,FNR.tree),random.forest=c(adjustedError,FPR.random.forest.adjust,FNR.random.forest.adjust),logistic.reg=c(lr_error_adjust,lr_FPR_adjust,lr_FNR_adjust))
+rownames(tree.class.table) <- c('Error','FPR','FNR')
+tree.class.table
+```
+
+### How Proposed Methods Answers Our Question of Interest
+The most important predictors for whether a car is sold or not is the selling price, km driven, and max power of a car. This is based on the random forest classification tree since the binary splitting tree showed that no predictors had any significance. The logistic regression method found the year, region, transmission, mileage, and max power as significant predictors on a significance level of 0.1 rather than the desired 0.05 level which only shows region as significant, similar to the binary splitting tree.
+
+### Proposed Best Method
+The best model in answering this question is the random forest classification tree. The random forest classification tree has the lowest error with a good FPR and FNR rate for the classification question that helps sellers determine what aspects of a car get the car sold in order to make a profit. These predictors are the selling price, km driven, and max power. Cars with a good selling price, less km driven, and are powerful are bound to be bought over other cars. \newline
+The logistic regression model is good at including multiple predictors (year, region, transmission, mileage, and max power), but on a 0.1 significance level rather than a 0.05. On a 0.05 significance level, only the region is involved, making it a poorer model than the 0.1 significance level. With this, the error is still higher than the random forest classification tree method. The binary splitting classification tree was poor in all aspects as it only saw region as an important factor, but even then, regardless of the region, the output of the tree was not sold. \newline
+Aside from this, it seems that there are other external factors that have not been considered that may be better predictors. Other factors that were not accounted for could be the buyer themselves and their financial status or even aspects of human behavior like buying on impulse that could ignore all predictors.
+
+# 5. Challenges and Further Work 
+Some troubles we had as a group were loading packages into our file. We forgot to load some packages and couldn’t use functions. It took a lot of time to finally figure out the issue and finally we were able to add the package for our function. Another challenge was to address the initial model being too uninformative for the classification question since it only had one significant predictor. We had to try various ways to uncover predictors that can potentially be significant. When we first started making the classification trees, we struggled to determine why we were getting a tree with only two nodes and how to analyze it. We tried using all the variables in the data set and compared it to our selected variables, and still there was no difference. After going to office hours, we determined that the predictors were not useful when it came to answering the question through classification trees. We continued from there and then struggled to determine how to adjust thresholds. After a long period of time, we realized that classification trees using different methods had different ways of changing the threshold. \newline
+If we had more time to work on this project, we would have tried to use a different dataset with different variables or even try to balance out the current dataset between cars that were sold and cars that weren't sold. A different dataset with different variables could inform us about other influential categories or even just indicate that the dataset we initially used is poor for predicting. Balancing the current dataset would allow for better analysis and test/train splits. Another aspect that we could dive deeper into is using datasets from other countries and compare those countries and what predictors are the most influential for their cars and their selling prices and whether they are sold or not. This could add a global aspect to the project and see if the car market differs significantly based on country.
