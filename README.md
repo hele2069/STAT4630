@@ -4,7 +4,7 @@ Code files in course STAT 4630: Statistical Machine Learning
 ## Content 
 Analyzing used car sales and influential predictors affecting that
 
-### Key Concepts
+## Key Concepts
 * Linear Regression
 * Logistic Regression
 * Linear Discriminant Analysis
